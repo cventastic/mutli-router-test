@@ -1,0 +1,50 @@
+version: '3.1'
+services:
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    restart: always
+    ports:
+      - "443:443"
+    command:
+      - "--api=true"
+      - "--api.insecure=true"
+      - "--api.dashboard=true"
+      - "--log.level=DEBUG"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.filename=/dynamic_config.yml"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      # TESTING
+      #- "--certificatesresolvers.myresolver.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
+      - "--certificatesresolvers.myresolver.acme.email=$MAIL"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    volumes:
+      - "./traefik/letsencrypt:/letsencrypt"
+      - "./traefik/config/dynamic_config.yml:/dynamic_config.yml"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    labels:
+      - "traefik.enable=true"
+
+  python:
+    build: ./build
+    expose:
+      - "420" #ws
+      - "69" #http
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      # ws
+      - "traefik.http.routers.ws.service=ws"
+      - "traefik.http.services.ws.loadbalancer.server.port=420"
+      - "traefik.http.routers.ws.entrypoints=websecure"
+      - "traefik.http.routers.ws.tls.certresolver=myresolver"
+      - "traefik.http.routers.ws.rule=Host(`$DOMAIN`)"
+
+      # http
+      - "traefik.http.routers.httpython.service=http"
+      - "traefik.http.services.http.loadbalancer.server.port=69"
+      - "traefik.http.routers.httpython.entrypoints=websecure"
+      - "traefik.http.routers.httpython.tls.certresolver=myresolver"
+      - "traefik.http.routers.httpython.rule=Host(`$DOMAIN`) && PathPrefix(`/example`)"
